@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Static
+yatube/static/
+
+# Media
+yatube/media/
+
 # C extensions
 *.so
 
@@ -149,4 +155,3 @@ dmypy.json
 static/
 yatube/posts/static/
 yatube/media/
-
