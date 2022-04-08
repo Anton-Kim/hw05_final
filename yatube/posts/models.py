@@ -23,6 +23,7 @@ class Group(models.Model):
 
 class Post(models.Model):
     text = models.TextField(
+        max_length=30000,
         verbose_name='Текст поста',
         help_text='Введите текст поста'
     )
@@ -75,6 +76,7 @@ class Comment(CreatedModel):
         verbose_name='Автор'
     )
     text = models.TextField(
+        max_length=3000,
         verbose_name='Текст комментария',
         help_text='Введите текст комментария'
     )
@@ -106,6 +108,11 @@ class Follow(CreatedModel):
         ordering = ('-created',)
         verbose_name = "Подписка"
         verbose_name_plural = "Подписки"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'author'],
+                name='unique_following'),
+        ]
 
     def __str__(self):
         return f"{self.user} подписан на {self.author}"

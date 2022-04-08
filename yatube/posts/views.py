@@ -11,6 +11,7 @@ def index(request):
     page_obj = paginator(request, post_list)
     context = {
         'page_obj': page_obj,
+        'index': True,
     }
     return render(request, 'posts/index.html', context)
 
@@ -27,18 +28,12 @@ def group_posts(request, slug):
 
 
 def profile(request, username):
-    if request.user.is_authenticated:
-        follow = User.objects.get(username=username)
-        following = Follow.objects.filter(user=request.user,
-                                          author=follow).exists()
-    else:
-        following = False
     author = get_object_or_404(User, username=username)
+    following = request.user.is_authenticated and Follow.objects.filter(user=request.user, author=author).exists()
     post_list = author.posts.select_related('group').all()
     page_obj = paginator(request, post_list)
     context = {
         'author': author,
-        'post_count': author.posts.count(),
         'page_obj': page_obj,
         'following': following,
     }
@@ -59,7 +54,10 @@ def post_detail(request, post_id):
 
 @login_required
 def post_create(request):
-    form = PostForm(request.POST or None)
+    form = PostForm(
+        request.POST or None,
+        files=request.FILES or None,
+    )
     if form.is_valid():
         post = form.save(commit=False)
         post.author = request.user
@@ -106,6 +104,7 @@ def follow_index(request):
     page_obj = paginator(request, post_list)
     context = {
         'page_obj': page_obj,
+        'follow': True,
     }
     return render(request, 'posts/follow.html', context)
 
@@ -124,7 +123,5 @@ def profile_follow(request, username):
 @login_required
 def profile_unfollow(request, username):
     follow = get_object_or_404(User, username=username)
-    is_exist = Follow.objects.filter(user=request.user, author=follow).exists()
-    if is_exist:
-        Follow.objects.filter(user=request.user, author=follow).delete()
+    Follow.objects.filter(user=request.user, author=follow).delete()
     return redirect('posts:profile', username=username)

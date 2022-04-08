@@ -29,7 +29,7 @@ class PostURLTests(TestCase):
         self.authorized_client_not_author = Client()
         self.authorized_client_not_author.force_login(PostURLTests.not_author)
 
-    def test_post_edit_url_redirect_anonymous(self):
+    def test_post_code_statuses_for_user_types(self):
         """Проверка кодов статусов на всех страницах для всех типов
         пользователей."""
         urls_user_types = {
@@ -61,6 +61,26 @@ class PostURLTests(TestCase):
             f'/posts/{PostURLTests.post.id}/edit/': {
                 self.guest_client: HTTPStatus.FOUND,
                 self.authorized_client: HTTPStatus.OK,
+                self.authorized_client_not_author: HTTPStatus.FOUND
+            },
+            f'/posts/{PostURLTests.post.id}/comment/': {
+                self.guest_client: HTTPStatus.FOUND,
+                self.authorized_client: HTTPStatus.FOUND,
+                self.authorized_client_not_author: HTTPStatus.FOUND
+            },
+            '/follow/': {
+                self.guest_client: HTTPStatus.FOUND,
+                self.authorized_client: HTTPStatus.OK,
+                self.authorized_client_not_author: HTTPStatus.OK
+            },
+            f'/profile/{PostURLTests.author.username}/follow/': {
+                self.guest_client: HTTPStatus.FOUND,
+                self.authorized_client: HTTPStatus.FOUND,
+                self.authorized_client_not_author: HTTPStatus.FOUND
+            },
+            f'/profile/{PostURLTests.author.username}/unfollow/': {
+                self.guest_client: HTTPStatus.FOUND,
+                self.authorized_client: HTTPStatus.FOUND,
                 self.authorized_client_not_author: HTTPStatus.FOUND
             }
         }

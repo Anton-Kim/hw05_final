@@ -1,12 +1,19 @@
-from django.test import Client, TestCase
+import shutil
+import tempfile
+
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.cache import cache
 
 from ..models import Group, Post, User, Follow
 from ..forms import PostForm
 
+TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
 class PostViewTests(TestCase):
     @classmethod
     def setUpClass(cls):
@@ -41,10 +48,15 @@ class PostViewTests(TestCase):
             image=cls.uploaded,
         )
 
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
+
     def setUp(self):
         self.authorized_client = Client()
         self.authorized_client.force_login(PostViewTests.author)
-        self.user = User.objects.create_user(username='Follow_tester')
+        self.user = User.objects.create_user(username='follow_tester')
         self.authorized_client_follower = Client()
         self.authorized_client_follower.force_login(self.user)
 
@@ -149,7 +161,6 @@ class PostViewTests(TestCase):
 
     def test_cache_index_page_context(self):
         """Проверка работы кеша страницы index.html."""
-        posts_count = Post.objects.count()
         response_cached = self.authorized_client.get('/')
         Post.objects.create(
             text='Не должен кешироваться',
@@ -158,53 +169,70 @@ class PostViewTests(TestCase):
         )
         response = self.authorized_client.get('/')
         self.assertEqual(response_cached.content, response.content)
-        self.assertEqual(Post.objects.count(), posts_count + 1)
+        cache.clear()
+        response = self.authorized_client.get('/')
+        self.assertNotEqual(response_cached.content, response.content)
 
-    def test_correct_follow_and_unfollow(self):
+    def test_cache_index_page_context_for_different_users(self):
+        """Проверка работы кеша страницы index.html для разных
+        пользователей."""
+        response_cached_author = self.authorized_client.get('/')
+        response_cached_follower = self.authorized_client_follower.get(
+            '/?page=2')
+        self.assertNotEqual(response_cached_author.content,
+                            response_cached_follower.content)
+
+    def test_correct_follow(self):
         """Проверка возможности авторизованному пользователю подписываться на
-        других пользователей и удалять их из подписок."""
-        follow_count = Follow.objects.filter(
-            user=self.user,
-            author=self.author
-        ).count()
-        self.assertEqual(0, follow_count)
+        других пользователей."""
         self.authorized_client_follower.get(reverse(
             'posts:profile_follow',
             kwargs={'username': 'author'})
         )
-        follow_count = Follow.objects.filter(
-            user=self.user,
-            author=self.author).count()
-        self.assertEqual(1, follow_count)
+        self.assertTrue(
+            Follow.objects.filter(user=self.user, author=self.author).exists())
+
+    def test_correct_unfollow(self):
+        """Проверка возможности авторизованному пользователю удалять из
+        подписок других пользователей."""
+        self.authorized_client_follower.get(reverse(
+            'posts:profile_follow',
+            kwargs={'username': 'author'})
+        )
         self.authorized_client_follower.get(reverse(
             'posts:profile_unfollow',
             kwargs={'username': 'author'})
         )
-        follow_count = Follow.objects.filter(
-            user=self.user,
-            author=self.author).count()
-        self.assertEqual(0, follow_count)
+        self.assertFalse(
+            Follow.objects.filter(user=self.user, author=self.author).exists())
 
-    def test_correct_follow_index_page_work(self):
+    def test_correct_follow_index_page_work_for_follower(self):
         """Проверка появления новой записи пользователя в ленте тех, кто на
-        него подписан и её отсутствия в ленте тех, кто не подписан."""
-        Post.objects.create(
+        него подписан."""
+        follow_post = Post.objects.create(
+            text='Тестовый пост для подписчика',
+            author=PostViewTests.author,
+            group=PostViewTests.group,
+        )
+        self.authorized_client_follower.get(reverse(
+            'posts:profile_follow',
+            kwargs={'username': 'author'})
+        )
+        response = self.authorized_client_follower.get(
+            reverse('posts:follow_index'))
+        self.assertEqual(follow_post, response.context['page_obj'][0])
+
+    def test_correct_follow_index_page_work_for_guest(self):
+        """Проверка отсутствия новой записи пользователя в ленте тех, кто на
+        него не подписан."""
+        follow_post = Post.objects.create(
             text='Тестовый пост для подписчика',
             author=PostViewTests.author,
             group=PostViewTests.group,
         )
         response = self.authorized_client_follower.get(
             reverse('posts:follow_index'))
-        posts_count = len(response.context['page_obj'])
-        self.assertEqual(0, posts_count)
-        self.authorized_client_follower.get(reverse(
-            'posts:profile_follow',
-            kwargs={'username': 'author'})
-        )
-        response = self.authorized_client_follower.get(
-            reverse('posts:follow_index'))
-        last_post = response.context['page_obj'][0].text
-        self.assertEqual('Тестовый пост для подписчика', last_post)
+        self.assertNotIn(follow_post, response.context['page_obj'].object_list)
 
 
 class PaginatorViewsTest(TestCase):
